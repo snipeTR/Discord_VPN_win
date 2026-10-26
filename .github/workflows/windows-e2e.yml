@@ -44,6 +44,7 @@ jobs:
           if ($code -ne 1 -or $out -notmatch 'Kurulum iptal edildi') { throw "unexpected result (exit $code)" }
           $docs = [Environment]::GetFolderPath('MyDocuments')
           if (Test-Path "$docs\wgcf-account.toml") { throw 'account must not exist after cancel at step 2' }
+          exit 0   # exit code 1 was expected; the runner would otherwise fail the step with it
 
       - name: Step mode -> E for every step (real install)
         timeout-minutes: 25
