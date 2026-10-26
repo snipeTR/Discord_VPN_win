@@ -1,2 +1,0 @@
-# Batch files must keep CRLF line endings, also in raw downloads from GitHub.
-*.bat -text
