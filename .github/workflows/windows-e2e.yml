@@ -1,0 +1,113 @@
+# Real end-to-end test of discord_vpn.ps1 on GitHub's Windows runners (they run as admin).
+# Installs WireSock, creates a WARP account and the service, then checks that only a
+# process named Discord.exe goes through WARP.
+name: Windows end-to-end test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - discord_vpn.ps1
+      - .github/workflows/windows-e2e.yml
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: powershell   # Windows PowerShell 5.1, same as end users
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Menu -> 3 (cancel)
+        timeout-minutes: 2
+        run: |
+          Set-Content "$env:RUNNER_TEMP\in.txt" "3`r`n`r`n" -Encoding ascii
+          cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File discord_vpn.ps1 < `"$env:RUNNER_TEMP\in.txt`" > `"$env:RUNNER_TEMP\out.txt`" 2>&1"
+          $code = $LASTEXITCODE
+          $out = Get-Content "$env:RUNNER_TEMP\out.txt" -Raw; $out
+          if ($code -ne 0 -or $out -notmatch 'Kurulum iptal edildi') { throw "unexpected result (exit $code)" }
+          if (Get-Service wiresock-client-service -ErrorAction SilentlyContinue) { throw 'service must not exist after cancel' }
+
+      - name: Step mode -> E, then H at step 2 (cancel)
+        timeout-minutes: 5
+        run: |
+          Set-Content "$env:RUNNER_TEMP\in.txt" "2`r`nE`r`nH`r`n`r`n" -Encoding ascii
+          cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File discord_vpn.ps1 < `"$env:RUNNER_TEMP\in.txt`" > `"$env:RUNNER_TEMP\out.txt`" 2>&1"
+          $code = $LASTEXITCODE
+          $out = Get-Content "$env:RUNNER_TEMP\out.txt" -Raw; $out
+          if ($code -ne 1 -or $out -notmatch 'Kurulum iptal edildi') { throw "unexpected result (exit $code)" }
+          $docs = [Environment]::GetFolderPath('MyDocuments')
+          if (Test-Path "$docs\wgcf-account.toml") { throw 'account must not exist after cancel at step 2' }
+          exit 0   # exit code 1 was expected; the runner would otherwise fail the step with it
+
+      - name: Step mode -> E for every step (real install)
+        timeout-minutes: 25
+        run: |
+          Set-Content "$env:RUNNER_TEMP\in.txt" "2`r`nE`r`nE`r`nE`r`nE`r`nE`r`nE`r`n`r`n" -Encoding ascii
+          cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File discord_vpn.ps1 < `"$env:RUNNER_TEMP\in.txt`" > `"$env:RUNNER_TEMP\out.txt`" 2>&1"
+          $code = $LASTEXITCODE
+          $out = Get-Content "$env:RUNNER_TEMP\out.txt" -Raw; $out
+          if ($code -ne 0 -or $out -notmatch 'KURULUM TAMAMLANDI') { throw "install failed (exit $code)" }
+
+      - name: Check service and files
+        run: |
+          $svc = Get-Service wiresock-client-service
+          $svc | Format-List Name, DisplayName, Status, StartType
+          if ($svc.Status -ne 'Running') { throw 'service is not running' }
+          if ($svc.StartType -ne 'Automatic') { throw 'service is not automatic' }
+          if (-not (Test-Path "$env:ProgramFiles\WireSock Secure Connect\bin\wiresock-client.exe")) { throw 'wiresock-client.exe missing' }
+          $docs = [Environment]::GetFolderPath('MyDocuments')
+          Get-Content "$docs\wgcf-profile.conf" | Where-Object { $_ -notmatch 'PrivateKey' }
+          if (-not (Select-String -Path "$docs\wgcf-profile.conf" -Pattern '^AllowedApps = Discord.exe$' -Quiet)) { throw 'AllowedApps line missing' }
+
+      - name: Only Discord.exe goes through WARP
+        run: |
+          # A copy of curl named Discord.exe must use WARP; normal curl must not.
+          Copy-Item "$env:SystemRoot\System32\curl.exe" "$env:RUNNER_TEMP\Discord.exe"
+          $url = 'https://www.cloudflare.com/cdn-cgi/trace'
+          for ($i = 1; $i -le 12; $i++) {
+              $discord = (& "$env:RUNNER_TEMP\Discord.exe" -s --max-time 10 $url) -join "`n"
+              if ($discord -match 'warp=(on|plus)') { break }
+              Start-Sleep -Seconds 5
+          }
+          $normal = (curl.exe -s --max-time 10 $url) -join "`n"
+          "Discord.exe: " + (($discord -split "`n") -match '^(warp|colo)=' -join ' ')
+          "curl.exe:    " + (($normal -split "`n") -match '^(warp|colo)=' -join ' ')
+          if ($discord -notmatch 'warp=(on|plus)') { throw 'Discord.exe traffic does not go through WARP' }
+          if ($normal -match 'warp=(on|plus)') { throw 'other programs must not go through WARP' }
+
+      - name: Re-run in auto mode (everything reused)
+        timeout-minutes: 10
+        run: |
+          cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File discord_vpn.ps1 -Mode auto < NUL > `"$env:RUNNER_TEMP\out.txt`" 2>&1"
+          $code = $LASTEXITCODE
+          $out = Get-Content "$env:RUNNER_TEMP\out.txt" -Raw; $out
+          if ($code -ne 0 -or $out -notmatch 'KURULUM TAMAMLANDI') { throw "re-run failed (exit $code)" }
+          foreach ($text in 'zaten indirilmi', 'WARP hesab.{1,2} zaten var', 'WireSock zaten kurulu', 'zaten var', 'yeniden ba.{1,2}lat') {
+              if ($out -notmatch $text) { throw "re-run did not reuse: $text" }
+          }
+          if ((Get-Service wiresock-client-service).Status -ne 'Running') { throw 'service is not running after re-run' }
+          $discord = (& "$env:RUNNER_TEMP\Discord.exe" -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace) -join "`n"
+          if ($discord -notmatch 'warp=(on|plus)') { throw 'Discord.exe not on WARP after re-run' }
+
+      - name: Collect logs
+        if: failure()
+        run: |
+          New-Item -ItemType Directory -Force logs | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\out.txt" logs -ErrorAction SilentlyContinue
+          Get-ChildItem $env:TEMP -Filter 'WireSock_Secure_Connect*.log' -ErrorAction SilentlyContinue | Copy-Item -Destination logs
+          Get-WinEvent -FilterHashtable @{ LogName = 'System'; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 200 -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'wiresock|ndiswgc' } | Format-List TimeCreated, Id, LevelDisplayName, Message | Out-File logs\system-events.txt
+          Get-ChildItem logs
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs-${{ matrix.os }}
+          path: logs
