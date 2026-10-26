@@ -1,62 +1,73 @@
-### ✅ Kısa Açıklama (Repository Description - Türkçe ve İngilizce)
+# Discord VPN (Windows)
 
-**Türkçe:**
 Windows'ta sadece Discord'u VPN'e yönlendiren WireSock + WGCF otomasyon scripti.
 
-**İngilizce:**
-Automated WireSock + WGCF setup on Windows to route only Discord traffic via VPN.
+*Automated WireSock + WGCF setup on Windows to route only Discord traffic via VPN.*
 
 ---
 
-### 📄 Ayrıntılı Açıklama (README Başlığı Altında Kullanılabilir)
+## Ne yapar?
 
-#### Discord VPN Otomasyon Scripti (`discord_vpn.bat`)
+`discord_vpn.bat`, **WGCF** ile ücretsiz bir Cloudflare WARP hesabı açar, **WireSock Secure Connect**'i kurar ve sadece **Discord uygulamasını** bu VPN üzerinden geçirecek bir Windows servisi oluşturur. Servis her açılışta otomatik başlar. Diğer tüm uygulamalar normal internet bağlantınızı kullanır.
 
-Bu script, Windows sisteminizde **WireSock** ve **WGCF** araçlarını otomatik olarak indirip kurar, yapılandırır ve sadece **Discord uygulamasını VPN üzerinden yönlendirecek şekilde ayar yapar**. Sistem başlangıcında otomatik çalışan bir servis olarak yapılandırılır.
-
-#### Temel Özellikler:
+### Özellikler
 
 * Otomatik mimari (32-bit / 64-bit) algılama
-* Gerekli araçların (curl, wgcf, WireSock) otomatik kurulumu
+* Gerekli dosyaların (wgcf, WireSock) otomatik indirilmesi
+* İndirilen dosyaların **SHA256 ile doğrulanması**
+* WireSock'un otomatik kurulumu (sihirbazda tıklama gerekmez)
 * Discord'a özel `AllowedApps` yönlendirmesi
 * WireSock servisi oluşturma ve başlatma
 * Admin yetkisi kontrolü ve otomatik yükseltme
-* Hata kontrolü ve manuel müdahale yönergeleri
+* Tekrar çalıştırılabilir: mevcut WARP hesabını ve kurulu WireSock'u yeniden kullanır
 
 ---
 
-### ⚠️ Dikkat Edilmesi Gerekenler
+## Gereksinimler
 
-1. **Script mutlaka "Yönetici olarak" çalıştırılmalıdır.** Aksi halde otomatik servis kurulumu yapılamaz.
-2. **İnternet bağlantınızın aktif olması gerekir.** Dosyalar internetten indirilecektir.
-3. `curl` ve `winget` sisteminizde yoksa script bunları otomatik yüklemeye çalışır, bu işlem için kullanıcı izni gerekebilir.
-4. **WireSock kurulum sihirbazı çalıştırılacaktır** — bu pencereye geçerek manuel kurulum adımlarını tamamlamanız gerekir.
-5. `wgcf` aracı Cloudflare WARP hesabı oluşturur. Eğer bu işlem başarısız olursa, script hata mesajlarıyla yönlendirme yapar.
+* Windows 10 veya 11 (x64 ya da x86). ARM64 desteklenmez.
+* İnternet bağlantısı
+* Yönetici yetkisi
 
 ---
 
-### ▶️ Nasıl Kullanılır?
+## Nasıl Kullanılır?
 
-1. **Script'i İndir:**
-   `discord_vpn.bat` dosyasını bilgisayarınıza indirin.
-
-2. **Sağ tıklayın > "Yönetici olarak çalıştır" seçin.**
-
+1. `discord_vpn.bat` dosyasını bilgisayarınıza indirin.
+2. **Sağ tıklayın > "Yönetici olarak çalıştır"** seçin.
 3. Script sırasıyla:
-
    * Sistem mimarinizi tespit eder
-   * Gerekli dosyaları indirir (curl, wgcf, WireSock)
-   * `wgcf` ile profil oluşturur
-   * Discord uygulamasını özel VPN'e yönlendirir
-   * WireSock’u kurar ve servis olarak başlatır
-
-4. Kurulum sırasında ek pencereler açılabilir (özellikle WireSock kurulumu sırasında). Bu pencerelerde yönergeleri takip edin.
-
-5. **Kurulum tamamlandığında:**
-   Discord uygulaması sadece WireSock üzerinden internete çıkacak şekilde yapılandırılmış olur. Diğer tüm uygulamalar sistem bağlantısını doğrudan kullanır.
+   * wgcf ve WireSock'u `Downloads` klasörüne indirir ve doğrular
+   * `wgcf` ile WARP hesabı ve profil oluşturur
+   * Profile `AllowedApps = Discord.exe` satırını ekler
+   * Profil ve hesap dosyalarını `Belgeler` klasörüne taşır
+   * WireSock'u kurar, `wiresock-client-service` servisini oluşturur ve başlatır
+4. Windows izin (UAC) penceresi çıkarsa onaylayın.
+5. Bitince Discord'u açıp sunuculara ve sesli kanallara bağlanarak kontrol edin.
 
 ---
 
-Sorun ile karşılaşırsanız ilgili servisi win+R tuşlarına basarak çıkan çalıştır ekranına "services.msc" yazıp enter'a basarak açılan servis penceresinden "WireSock WireGuard VPN Client Service" isimli servisi, kapatıp, açıp, yada yeniden başlatarak düzeltebilirsiniz.
+## ⚠️ Dikkat Edilmesi Gerekenler
+
+1. `wgcf` sizin adınıza bir Cloudflare WARP hesabı açar ve Cloudflare'in kullanım şartlarını kabul eder.
+2. `Belgeler\wgcf-account.toml` dosyası hesabınızın gizli anahtarını içerir. Kimseyle paylaşmayın.
+3. curl yoksa script onu `winget` ile kurmaya çalışır. Bu da olmazsa indirme adreslerini gösterir ve dosyaları elle indirmenizi ister.
+4. WireSock kurulumu gerekirse Microsoft'tan .NET Desktop Runtime da indirir; bu biraz sürebilir.
+
+---
+
+## Sorun Giderme
+
+Sorun yaşarsanız Win+R tuşlarına basın, `services.msc` yazıp Enter'a basın. Açılan pencerede **"WireSock WireGuard VPN Client Service"** (`wiresock-client-service`) isimli servisi durdurup başlatın ya da yeniden başlatın.
+
 ![image](https://github.com/user-attachments/assets/8c484221-0d0f-4aa7-ba0d-d9b5982588a8)
 
+Script'i tekrar çalıştırmak da güvenlidir: mevcut hesap ve kurulum yeniden kullanılır, servis yeni ayarlarla yeniden başlatılır.
+
+---
+
+## Kaldırma
+
+1. **Ayarlar > Uygulamalar** bölümünden **WireSock Secure Connect**'i kaldırın. Servis de birlikte silinir.
+2. `Belgeler` klasöründeki `wgcf-profile.conf` ve `wgcf-account.toml` dosyalarını silin.
+3. İsterseniz `Downloads` klasöründeki `wgcf_*.exe` ve `wiresock-secure-connect-*.exe` dosyalarını da silin.
